@@ -1,0 +1,5 @@
+window.APP_CONFIG = {
+  AIRTABLE_TOKEN: "",
+  AIRTABLE_BASE_ID: "",
+  AIRTABLE_TABLE_NAME: "Properties"
+};

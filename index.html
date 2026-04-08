@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sacramento Commercial Property Comparison</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <header class="page-header">
+        <h1>Sacramento Commercial Property Comparison</h1>
+        <p>
+          Add listings, compare opportunities, and rank deals using a simple
+          weighted score.
+        </p>
+      </header>
+
+      <section class="card">
+        <h2>Add Property</h2>
+        <form id="property-form" class="form-grid">
+          <label>
+            Property Name
+            <input name="Property Name" required />
+          </label>
+          <label>
+            Address
+            <input name="Address" required />
+          </label>
+          <label>
+            City
+            <input name="City" value="Sacramento" />
+          </label>
+          <label>
+            Submarket
+            <input name="Submarket" placeholder="Downtown, Midtown, etc." />
+          </label>
+          <label>
+            Asset Type
+            <input name="Asset Type" placeholder="Office / Retail / Industrial" />
+          </label>
+          <label>
+            Asking Price ($)
+            <input name="Asking Price" type="number" min="0" step="0.01" />
+          </label>
+          <label>
+            Price per SF ($)
+            <input name="Price per SF" type="number" min="0" step="0.01" />
+          </label>
+          <label>
+            Building SF
+            <input name="Building SF" type="number" min="0" step="1" />
+          </label>
+          <label>
+            Lot Size
+            <input name="Lot Size" />
+          </label>
+          <label>
+            Cap Rate (%)
+            <input name="Cap Rate" type="number" min="0" max="100" step="0.01" />
+          </label>
+          <label>
+            NOI ($)
+            <input name="NOI" type="number" min="0" step="0.01" />
+          </label>
+          <label>
+            Occupancy (%)
+            <input name="Occupancy" type="number" min="0" max="100" step="0.01" />
+          </label>
+          <label>
+            Year Built
+            <input name="Year Built" type="number" min="1800" max="2100" step="1" />
+          </label>
+          <label>
+            Broker Name
+            <input name="Broker Name" />
+          </label>
+          <label>
+            Broker Email
+            <input name="Broker Email" type="email" />
+          </label>
+          <label>
+            Source URL
+            <input name="Source URL" type="url" placeholder="https://..." />
+          </label>
+          <label>
+            Status
+            <select name="Status">
+              <option value="">Select status</option>
+              <option value="Active">Active</option>
+              <option value="Under Review">Under Review</option>
+              <option value="LOI">LOI</option>
+              <option value="Closed">Closed</option>
+            </select>
+          </label>
+          <label class="full-width">
+            Notes
+            <textarea name="Notes" rows="3"></textarea>
+          </label>
+
+          <button type="submit">Save Property</button>
+          <p id="form-message" role="status" aria-live="polite"></p>
+        </form>
+      </section>
+
+      <section class="card">
+        <div class="table-heading">
+          <h2>Property Table</h2>
+          <button id="refresh-btn" type="button">Refresh</button>
+        </div>
+
+        <div class="filters">
+          <label>
+            Search
+            <input id="search-input" placeholder="Name, address, broker..." />
+          </label>
+          <label>
+            City
+            <input id="city-filter" placeholder="Sacramento" />
+          </label>
+          <label>
+            Asset Type
+            <input id="asset-filter" placeholder="Office" />
+          </label>
+          <label>
+            Status
+            <select id="status-filter">
+              <option value="">All</option>
+              <option>Active</option>
+              <option>Under Review</option>
+              <option>LOI</option>
+              <option>Closed</option>
+            </select>
+          </label>
+          <label>
+            Min Score
+            <input id="min-score-filter" type="number" min="0" max="100" step="1" />
+          </label>
+          <label>
+            Sort By
+            <select id="sort-field">
+              <option value="Score">Score</option>
+              <option value="Cap Rate">Cap Rate</option>
+              <option value="Price per SF">Price per SF</option>
+              <option value="Occupancy">Occupancy</option>
+              <option value="Asking Price">Asking Price</option>
+              <option value="Property Name">Property Name</option>
+            </select>
+          </label>
+          <label>
+            Direction
+            <select id="sort-direction">
+              <option value="desc">Descending</option>
+              <option value="asc">Ascending</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Property</th>
+                <th>Address</th>
+                <th>City</th>
+                <th>Asset</th>
+                <th>Asking Price</th>
+                <th>Price/SF</th>
+                <th>Cap Rate</th>
+                <th>Occupancy</th>
+                <th>Status</th>
+                <th>Score</th>
+                <th>Source</th>
+              </tr>
+            </thead>
+            <tbody id="properties-body"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <script src="config.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
