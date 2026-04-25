@@ -1,99 +1,52 @@
-# Sacramento Commercial Property Comparison App
+# Sacramento Investment Property Analytics App
 
-A simple Airtable-backed web app for tracking and comparing Sacramento commercial property listings.
+A GitHub Pages app backed by Airtable for tracking and comparing Sacramento-area commercial real estate investment deals.
 
-## What this app includes
+## Current app structure
 
-- **Airtable backend** with one table: `Properties`
-- **Add Property form** to create new records
-- **Table view** with search, filter, and sort controls
-- **Settings modal** for entering Airtable credentials in the browser
-- **Scoring logic** (0–100) based on:
-  - higher cap rate (better)
-  - lower price per SF (better)
-  - occupancy upside (more room to lease up = better)
-- Clean, lightweight UI using plain HTML/CSS/JS
+The app is designed for one Airtable table named `Properties`. The form is grouped to mirror the investment-property analytics spreadsheet layout:
 
----
+- Property Info
+- CAP / Return Metrics
+- Purchase / Cost Inputs
+- Debt Service
+- Income Summary
+- Tenant 1 through Tenant 4
+- Expenses
+- 5-Year Forecast
+- Review / Workflow
 
-## 1) Airtable setup
+## Airtable setup
 
-1. Create a new Airtable Base.
-2. Create one table named **`Properties`**.
-3. Add these fields exactly (recommended field types in parentheses):
+Open the app, click **Settings**, enter:
 
-- `Property Name` (Single line text)
-- `Address` (Single line text)
-- `City` (Single line text)
-- `Submarket` (Single line text)
-- `Asset Type` (Single select or single line text)
-- `Asking Price` (Currency)
-- `Price per SF` (Currency)
-- `Building SF` (Number)
-- `Lot Size` (Single line text)
-- `Cap Rate` (Percent)
-- `NOI` (Currency)
-- `Occupancy` (Percent)
-- `Year Built` (Number)
-- `Broker Name` (Single line text)
-- `Broker Email` (Email)
-- `Source URL` (URL)
-- `Status` (Single select)
-- `Notes` (Long text)
-- `Score` (Number)
+- Airtable Personal Access Token
+- Airtable Base ID
+- Table Name: `Properties`
 
-> The app writes `Score` on create, but still recalculates score client-side when rendering records.
+Then click:
 
----
+1. **Save Settings**
+2. **Setup / Expand Properties Table**
+3. **Test Connection**
+4. **Refresh**
 
-## 2) Airtable API credentials
+The setup button creates missing fields only. It does not delete records, delete tables, or remove existing fields.
 
-You need:
+Your Airtable token needs access to the base and these scopes for the setup button:
 
-- **Base ID** (from Airtable API docs for your base)
-- **Personal Access Token** with scopes:
-  - `data.records:read`
-  - `data.records:write`
-  - Access to your target base
+- `data.records:read`
+- `data.records:write`
+- `schema.bases:read`
+- `schema.bases:write`
 
-### Recommended: use the Settings button
+## Security note
 
-1. Open the app.
-2. Click **Settings**.
-3. Enter your Airtable Personal Access Token, Base ID, and Table Name.
-4. Click **Save Settings**.
-5. Click **Test Connection**.
-6. Click **Refresh** to reload records.
+This is a client-side browser app. Any Airtable token entered into the browser is visible to that browser. Use a token restricted to the specific base and scopes needed. For production, use a backend proxy so the token is not exposed in browser JavaScript.
 
-The app saves those values only in your browser using `localStorage`. They are not committed to GitHub.
+## Local development
 
-### Optional fallback: local `config.js`
-
-For local development, you can still copy the config template:
-
-```bash
-cp config.example.js config.js
-```
-
-Then edit `config.js`:
-
-```js
-window.APP_CONFIG = {
-  AIRTABLE_TOKEN: "pat_your_token_here",
-  AIRTABLE_BASE_ID: "app_your_base_id_here",
-  AIRTABLE_TABLE_NAME: "Properties"
-};
-```
-
-`config.js` is ignored by Git so credentials are not committed.
-
-⚠️ This is a client-side demo. Do **not** use this pattern for production without a backend proxy because any token used by browser JavaScript can be viewed in that browser.
-
----
-
-## 3) Run locally
-
-Any static web server works. Example with Python:
+Run a static web server:
 
 ```bash
 python3 -m http.server 8080
@@ -101,46 +54,6 @@ python3 -m http.server 8080
 
 Then open:
 
-- `http://localhost:8080`
-
----
-
-## 4) Scoring logic details
-
-The app computes a weighted score from **0 to 100**:
-
-- **Cap Rate (50 pts max):** normalized from 3% to 10%.
-- **Price per SF (30 pts max):** lower is better; normalized from $300 down to $50.
-- **Occupancy Upside (20 pts max):** upside = `100 - Occupancy`; capped for practical range.
-
-### App formula
-
 ```text
-Score = round(
-  clamp((CapRate - 3) / 7, 0..1) * 50
-  + clamp((300 - PricePerSF) / 250, 0..1) * 30
-  + clamp((100 - Occupancy) / 40, 0..1) * 20
-)
+http://localhost:8080
 ```
-
-### Optional Airtable formula field alternative
-
-If you prefer calculating directly in Airtable, change `Score` to a formula field and use:
-
-```text
-ROUND(
-  MAX(0, MIN(1, ({Cap Rate} - 3) / 7)) * 50 +
-  MAX(0, MIN(1, (300 - {Price per SF}) / 250)) * 30 +
-  MAX(0, MIN(1, (100 - {Occupancy}) / 40)) * 20,
-0)
-```
-
----
-
-## 5) Using the app
-
-- Click **Settings** and save your Airtable connection values.
-- Fill out the **Add Property** form and click **Save Property**.
-- Use filters to narrow list by city, asset type, status, or minimum score.
-- Use **Sort By** and **Direction** to compare opportunities quickly.
-- Click **Refresh** to reload from Airtable.
