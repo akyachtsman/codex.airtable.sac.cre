@@ -18,6 +18,8 @@ The app is designed for one Airtable table named `Properties`. The form is group
 
 ## Airtable setup
 
+The Airtable `Properties` table should already exist with the expanded investment analytics fields.
+
 Open the app, click **Settings**, enter:
 
 - Airtable Personal Access Token
@@ -27,18 +29,15 @@ Open the app, click **Settings**, enter:
 Then click:
 
 1. **Save Settings**
-2. **Setup / Expand Properties Table**
-3. **Test Connection**
-4. **Refresh**
+2. **Test Connection**
+3. **Refresh**
 
-The setup button creates missing fields only. It does not delete records, delete tables, or remove existing fields.
-
-Your Airtable token needs access to the base and these scopes for the setup button:
+Your Airtable token needs access to the base and these scopes for normal app use:
 
 - `data.records:read`
 - `data.records:write`
-- `schema.bases:read`
-- `schema.bases:write`
+
+Schema setup is handled outside the GitHub Pages app through Airtable directly or through the connected Airtable tool, not from the Settings modal.
 
 ## Security note
 
