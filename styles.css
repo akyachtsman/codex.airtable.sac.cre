@@ -96,6 +96,11 @@ button:hover {
   opacity: 0.95;
 }
 
+button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
 .secondary-btn {
   background: #eef4ff;
   color: var(--primary);
@@ -220,10 +225,16 @@ td a:hover {
   margin: 0;
 }
 
-.settings-help {
+.settings-help,
+.settings-note {
   margin: 10px 0 16px;
   color: var(--muted);
   line-height: 1.45;
+}
+
+.settings-note {
+  margin: 0;
+  font-size: 0.82rem;
 }
 
 .settings-form {

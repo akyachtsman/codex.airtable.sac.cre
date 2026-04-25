@@ -13,12 +13,9 @@ function getAirtableConfig() {
   const fallback = window.APP_CONFIG || {};
 
   return {
-    AIRTABLE_TOKEN:
-      stored.AIRTABLE_TOKEN || fallback.AIRTABLE_TOKEN || "",
-    AIRTABLE_BASE_ID:
-      stored.AIRTABLE_BASE_ID || fallback.AIRTABLE_BASE_ID || "",
-    AIRTABLE_TABLE_NAME:
-      stored.AIRTABLE_TABLE_NAME || fallback.AIRTABLE_TABLE_NAME || "Properties"
+    AIRTABLE_TOKEN: stored.AIRTABLE_TOKEN || fallback.AIRTABLE_TOKEN || "",
+    AIRTABLE_BASE_ID: stored.AIRTABLE_BASE_ID || fallback.AIRTABLE_BASE_ID || "",
+    AIRTABLE_TABLE_NAME: stored.AIRTABLE_TABLE_NAME || fallback.AIRTABLE_TABLE_NAME || "Properties"
   };
 }
 
@@ -68,6 +65,7 @@ const settingsBaseId = document.getElementById("settings-base-id");
 const settingsTableName = document.getElementById("settings-table-name");
 const settingsMessage = document.getElementById("settings-message");
 const testConnectionBtn = document.getElementById("test-connection-btn");
+const setupTableBtn = document.getElementById("setup-table-btn");
 const clearSettingsBtn = document.getElementById("clear-settings-btn");
 
 const filterInputs = {
@@ -92,6 +90,40 @@ const numericFields = new Set([
   "Year Built",
   "Score"
 ]);
+
+const requiredAirtableFields = [
+  { name: "Property Name", type: "singleLineText", description: "Property or listing name." },
+  { name: "Address", type: "singleLineText", description: "Property street address." },
+  { name: "City", type: "singleLineText", description: "City or municipality for the property." },
+  { name: "Submarket", type: "singleLineText", description: "Neighborhood or submarket." },
+  { name: "Asset Type", type: "singleLineText", description: "Property type such as office, retail, industrial, or mixed use." },
+  { name: "Asking Price", type: "currency", description: "Seller asking price in dollars.", options: { precision: 2, symbol: "$" } },
+  { name: "Price per SF", type: "number", description: "Asking price divided by building square feet.", options: { precision: 2 } },
+  { name: "Building SF", type: "number", description: "Building size in square feet.", options: { precision: 0 } },
+  { name: "Lot Size", type: "singleLineText", description: "Lot size, acreage, or parcel size." },
+  { name: "Cap Rate", type: "number", description: "Capitalization rate as a whole number. Example: 7.5 means 7.5%.", options: { precision: 2 } },
+  { name: "NOI", type: "currency", description: "Net operating income in dollars.", options: { precision: 2, symbol: "$" } },
+  { name: "Occupancy", type: "number", description: "Occupancy as a whole number. Example: 85 means 85%.", options: { precision: 2 } },
+  { name: "Year Built", type: "number", description: "Year the property was built.", options: { precision: 0 } },
+  { name: "Broker Name", type: "singleLineText", description: "Listing broker name." },
+  { name: "Broker Email", type: "email", description: "Listing broker email." },
+  { name: "Source URL", type: "url", description: "Listing or source webpage." },
+  {
+    name: "Status",
+    type: "singleSelect",
+    description: "Deal review status.",
+    options: {
+      choices: [
+        { name: "Active", color: "greenLight2" },
+        { name: "Under Review", color: "yellowLight2" },
+        { name: "LOI", color: "blueLight2" },
+        { name: "Closed", color: "grayLight2" }
+      ]
+    }
+  },
+  { name: "Notes", type: "multilineText", description: "General notes." },
+  { name: "Score", type: "number", description: "Calculated property score from 0 to 100.", options: { precision: 0 } }
+];
 
 function setStatus(element, message, color) {
   element.textContent = message;
@@ -131,10 +163,8 @@ function calculateScoreFromFields(data) {
   const pricePerSF = toNumber(data["Price per SF"]);
   const occupancy = toNumber(data["Occupancy"]);
 
-  const capComponent =
-    capRate == null ? 0 : clamp((capRate - 3) / (10 - 3), 0, 1) * 50;
-  const priceComponent =
-    pricePerSF == null ? 0 : clamp((300 - pricePerSF) / (300 - 50), 0, 1) * 30;
+  const capComponent = capRate == null ? 0 : clamp((capRate - 3) / (10 - 3), 0, 1) * 50;
+  const priceComponent = pricePerSF == null ? 0 : clamp((300 - pricePerSF) / (300 - 50), 0, 1) * 30;
 
   const upside = occupancy == null ? 0 : clamp(100 - occupancy, 0, 100);
   const upsideComponent = clamp(upside / 40, 0, 1) * 20;
@@ -148,6 +178,11 @@ function baseUrl() {
   return `https://api.airtable.com/v0/${airtableConfig.AIRTABLE_BASE_ID}/${encodeURIComponent(
     airtableConfig.AIRTABLE_TABLE_NAME
   )}`;
+}
+
+function metaBaseUrl() {
+  airtableConfig = getAirtableConfig();
+  return `https://api.airtable.com/v0/meta/bases/${airtableConfig.AIRTABLE_BASE_ID}`;
 }
 
 async function airtableRequest(url, options = {}) {
@@ -268,8 +303,7 @@ function renderRows(inputRecords) {
   const filtered = applyFiltersAndSort(inputRecords);
 
   if (!filtered.length) {
-    tbody.innerHTML =
-      '<tr><td class="empty-row" colspan="11">No matching properties.</td></tr>';
+    tbody.innerHTML = '<tr><td class="empty-row" colspan="11">No matching properties.</td></tr>';
     return;
   }
 
@@ -370,6 +404,112 @@ async function testConnection() {
   }
 }
 
+function getSettingsFormConfig() {
+  return {
+    AIRTABLE_TOKEN: settingsToken.value.trim(),
+    AIRTABLE_BASE_ID: settingsBaseId.value.trim(),
+    AIRTABLE_TABLE_NAME: settingsTableName.value.trim() || "Properties"
+  };
+}
+
+function assertSettingsComplete(config) {
+  if (!config.AIRTABLE_TOKEN || !config.AIRTABLE_BASE_ID || !config.AIRTABLE_TABLE_NAME) {
+    throw new Error("Enter token, base ID, and table name first.");
+  }
+}
+
+async function getBaseSchema() {
+  return airtableRequest(`${metaBaseUrl()}/tables`, { method: "GET" });
+}
+
+function findConfiguredTable(schema) {
+  const tableName = airtableConfig.AIRTABLE_TABLE_NAME.toLowerCase();
+  return (schema.tables || []).find((table) => table.name.toLowerCase() === tableName);
+}
+
+async function renamePrimaryNameFieldIfNeeded(table) {
+  const currentNames = new Set(table.fields.map((field) => field.name));
+  if (currentNames.has("Property Name")) return "Property Name already exists.";
+
+  const nameField = table.fields.find((field) => field.name === "Name" && field.type === "singleLineText");
+  if (!nameField) return "No generic Name field found to rename.";
+
+  await airtableRequest(`${metaBaseUrl()}/tables/${table.id}/fields/${nameField.id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ name: "Property Name", description: "Property or listing name." })
+  });
+
+  return "Renamed Name to Property Name.";
+}
+
+async function createMissingField(table, fieldSpec) {
+  const body = {
+    name: fieldSpec.name,
+    type: fieldSpec.type,
+    description: fieldSpec.description || ""
+  };
+
+  if (fieldSpec.options) {
+    body.options = fieldSpec.options;
+  }
+
+  await airtableRequest(`${metaBaseUrl()}/tables/${table.id}/fields`, {
+    method: "POST",
+    body: JSON.stringify(body)
+  });
+}
+
+async function setupPropertiesTable() {
+  const config = getSettingsFormConfig();
+
+  try {
+    assertSettingsComplete(config);
+    saveAirtableConfig(config);
+    airtableConfig = getAirtableConfig();
+
+    setupTableBtn.disabled = true;
+    setStatus(
+      settingsMessage,
+      "Setting up table… Your token needs schema.bases:read and schema.bases:write.",
+      "#6b7280"
+    );
+
+    let schema = await getBaseSchema();
+    let table = findConfiguredTable(schema);
+
+    if (!table) {
+      throw new Error(`Table not found: ${airtableConfig.AIRTABLE_TABLE_NAME}`);
+    }
+
+    const actions = [];
+    actions.push(await renamePrimaryNameFieldIfNeeded(table));
+
+    schema = await getBaseSchema();
+    table = findConfiguredTable(schema);
+    const existingFieldNames = new Set(table.fields.map((field) => field.name));
+
+    for (const fieldSpec of requiredAirtableFields) {
+      if (existingFieldNames.has(fieldSpec.name)) continue;
+      await createMissingField(table, fieldSpec);
+      existingFieldNames.add(fieldSpec.name);
+      actions.push(`Created ${fieldSpec.name}.`);
+    }
+
+    const createdCount = actions.filter((action) => action.startsWith("Created ")).length;
+    setStatus(
+      settingsMessage,
+      `Setup complete. ${createdCount} missing fields created. ${actions[0]}`,
+      "#027a48"
+    );
+    setStatus(formMessage, "Properties table setup complete. Try saving a property now.", "#027a48");
+  } catch (error) {
+    console.error(error);
+    setStatus(settingsMessage, `Setup failed: ${error.message}`, "#b42318");
+  } finally {
+    setupTableBtn.disabled = false;
+  }
+}
+
 settingsBtn.addEventListener("click", openSettings);
 settingsCloseBtn.addEventListener("click", closeSettings);
 
@@ -384,11 +524,7 @@ document.addEventListener("keydown", (event) => {
 settingsForm.addEventListener("submit", (event) => {
   event.preventDefault();
 
-  const config = {
-    AIRTABLE_TOKEN: settingsToken.value.trim(),
-    AIRTABLE_BASE_ID: settingsBaseId.value.trim(),
-    AIRTABLE_TABLE_NAME: settingsTableName.value.trim() || "Properties"
-  };
+  const config = getSettingsFormConfig();
 
   saveAirtableConfig(config);
   airtableConfig = getAirtableConfig();
@@ -397,6 +533,7 @@ settingsForm.addEventListener("submit", (event) => {
 });
 
 testConnectionBtn.addEventListener("click", testConnection);
+setupTableBtn.addEventListener("click", setupPropertiesTable);
 
 clearSettingsBtn.addEventListener("click", () => {
   clearAirtableConfig();
