@@ -9,11 +9,16 @@
   <body>
     <main class="container">
       <header class="page-header">
-        <h1>Sacramento Commercial Property Comparison</h1>
-        <p>
-          Add listings, compare opportunities, and rank deals using a simple
-          weighted score.
-        </p>
+        <div>
+          <h1>Sacramento Commercial Property Comparison</h1>
+          <p>
+            Add listings, compare opportunities, and rank deals using a simple
+            weighted score.
+          </p>
+        </div>
+        <button id="settings-btn" class="secondary-btn" type="button" aria-haspopup="dialog">
+          Settings
+        </button>
       </header>
 
       <section class="card">
@@ -178,6 +183,40 @@
         </div>
       </section>
     </main>
+
+    <div id="settings-overlay" class="settings-overlay" hidden>
+      <div class="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+        <div class="modal-header">
+          <h2 id="settings-title">Airtable Settings</h2>
+          <button id="settings-close-btn" class="icon-btn" type="button" aria-label="Close settings">
+            ×
+          </button>
+        </div>
+        <p class="settings-help">
+          These values are saved only in this browser using localStorage. They are not committed to GitHub.
+        </p>
+        <form id="settings-form" class="settings-form">
+          <label>
+            Airtable Personal Access Token
+            <input id="settings-token" type="password" autocomplete="off" placeholder="pat..." />
+          </label>
+          <label>
+            Airtable Base ID
+            <input id="settings-base-id" autocomplete="off" placeholder="app..." />
+          </label>
+          <label>
+            Airtable Table Name
+            <input id="settings-table-name" autocomplete="off" placeholder="Properties" />
+          </label>
+          <div class="modal-actions">
+            <button type="submit">Save Settings</button>
+            <button id="test-connection-btn" class="secondary-btn" type="button">Test Connection</button>
+            <button id="clear-settings-btn" class="danger-btn" type="button">Clear</button>
+          </div>
+          <p id="settings-message" role="status" aria-live="polite"></p>
+        </form>
+      </div>
+    </div>
 
     <script src="config.js"></script>
     <script src="app.js"></script>
