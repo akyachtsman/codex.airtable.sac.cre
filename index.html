@@ -3,180 +3,64 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Sacramento Commercial Property Comparison</title>
+    <title>Sacramento Investment Property Analytics</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <main class="container">
       <header class="page-header">
         <div>
-          <h1>Sacramento Commercial Property Comparison</h1>
-          <p>
-            Add listings, compare opportunities, and rank deals using a simple
-            weighted score.
-          </p>
+          <p class="eyebrow">Investment Property Analytics</p>
+          <h1>Sacramento CRE Deal Analyzer</h1>
+          <p>Track property info, acquisition assumptions, debt service, income, expenses, and 5-year return projections in one Airtable-backed dashboard.</p>
         </div>
-        <button id="settings-btn" class="secondary-btn" type="button" aria-haspopup="dialog">
-          Settings
-        </button>
+        <button id="settings-btn" class="secondary-btn" type="button" aria-haspopup="dialog">Settings</button>
       </header>
 
-      <section class="card">
-        <h2>Add Property</h2>
-        <form id="property-form" class="form-grid">
-          <label>
-            Property Name
-            <input name="Property Name" required />
-          </label>
-          <label>
-            Address
-            <input name="Address" required />
-          </label>
-          <label>
-            City
-            <input name="City" value="Sacramento" />
-          </label>
-          <label>
-            Submarket
-            <input name="Submarket" placeholder="Downtown, Midtown, etc." />
-          </label>
-          <label>
-            Asset Type
-            <input name="Asset Type" placeholder="Office / Retail / Industrial" />
-          </label>
-          <label>
-            Asking Price ($)
-            <input name="Asking Price" type="number" min="0" step="0.01" />
-          </label>
-          <label>
-            Price per SF ($)
-            <input name="Price per SF" type="number" min="0" step="0.01" />
-          </label>
-          <label>
-            Building SF
-            <input name="Building SF" type="number" min="0" step="1" />
-          </label>
-          <label>
-            Lot Size
-            <input name="Lot Size" />
-          </label>
-          <label>
-            Cap Rate (%)
-            <input name="Cap Rate" type="number" min="0" max="100" step="0.01" />
-          </label>
-          <label>
-            NOI ($)
-            <input name="NOI" type="number" min="0" step="0.01" />
-          </label>
-          <label>
-            Occupancy (%)
-            <input name="Occupancy" type="number" min="0" max="100" step="0.01" />
-          </label>
-          <label>
-            Year Built
-            <input name="Year Built" type="number" min="1800" max="2100" step="1" />
-          </label>
-          <label>
-            Broker Name
-            <input name="Broker Name" />
-          </label>
-          <label>
-            Broker Email
-            <input name="Broker Email" type="email" />
-          </label>
-          <label>
-            Source URL
-            <input name="Source URL" type="url" placeholder="https://..." />
-          </label>
-          <label>
-            Status
-            <select name="Status">
-              <option value="">Select status</option>
-              <option value="Active">Active</option>
-              <option value="Under Review">Under Review</option>
-              <option value="LOI">LOI</option>
-              <option value="Closed">Closed</option>
-            </select>
-          </label>
-          <label class="full-width">
-            Notes
-            <textarea name="Notes" rows="3"></textarea>
-          </label>
+      <section class="summary-grid" aria-label="Deal summary">
+        <article class="summary-card"><span>Total Properties</span><strong id="metric-count">—</strong></article>
+        <article class="summary-card"><span>Avg Cap Rate</span><strong id="metric-cap">—</strong></article>
+        <article class="summary-card"><span>Avg DSCR</span><strong id="metric-dscr">—</strong></article>
+        <article class="summary-card"><span>Total Asking Price</span><strong id="metric-asking">—</strong></article>
+      </section>
 
-          <button type="submit">Save Property</button>
+      <section class="card">
+        <div class="section-heading">
+          <div>
+            <h2>Add / Edit Property</h2>
+            <p>Fields are grouped to mirror your investment-property analytics sheet.</p>
+          </div>
+          <button id="clear-form-btn" class="secondary-btn" type="button">Clear Form</button>
+        </div>
+        <form id="property-form" class="analytics-form"></form>
+        <div class="form-actions">
+          <button id="save-property-btn" type="submit" form="property-form">Save Property</button>
           <p id="form-message" role="status" aria-live="polite"></p>
-        </form>
+        </div>
       </section>
 
       <section class="card">
         <div class="table-heading">
-          <h2>Property Table</h2>
+          <div>
+            <h2>Property Table</h2>
+            <p>Sort, filter, and compare the key deal metrics.</p>
+          </div>
           <button id="refresh-btn" type="button">Refresh</button>
         </div>
 
         <div class="filters">
-          <label>
-            Search
-            <input id="search-input" placeholder="Name, address, broker..." />
-          </label>
-          <label>
-            City
-            <input id="city-filter" placeholder="Sacramento" />
-          </label>
-          <label>
-            Asset Type
-            <input id="asset-filter" placeholder="Office" />
-          </label>
-          <label>
-            Status
-            <select id="status-filter">
-              <option value="">All</option>
-              <option>Active</option>
-              <option>Under Review</option>
-              <option>LOI</option>
-              <option>Closed</option>
-            </select>
-          </label>
-          <label>
-            Min Score
-            <input id="min-score-filter" type="number" min="0" max="100" step="1" />
-          </label>
-          <label>
-            Sort By
-            <select id="sort-field">
-              <option value="Score">Score</option>
-              <option value="Cap Rate">Cap Rate</option>
-              <option value="Price per SF">Price per SF</option>
-              <option value="Occupancy">Occupancy</option>
-              <option value="Asking Price">Asking Price</option>
-              <option value="Property Name">Property Name</option>
-            </select>
-          </label>
-          <label>
-            Direction
-            <select id="sort-direction">
-              <option value="desc">Descending</option>
-              <option value="asc">Ascending</option>
-            </select>
-          </label>
+          <label>Search<input id="search-input" placeholder="Name, address, tenant, broker..." /></label>
+          <label>City<input id="city-filter" placeholder="Sacramento" /></label>
+          <label>Asset Type<input id="asset-filter" placeholder="Retail" /></label>
+          <label>Status<select id="status-filter"><option value="">All</option><option>Active</option><option>Under Review</option><option>LOI</option><option>Closed</option><option>Passed</option></select></label>
+          <label>Sort By<select id="sort-field"><option value="Cap Rate">Cap Rate</option><option value="DSCR Ratio">DSCR Ratio</option><option value="Cash on Cash">Cash on Cash</option><option value="Annual IRR">Annual IRR</option><option value="5Y Total Return">5Y Total Return</option><option value="Asking Price">Asking Price</option><option value="Property Name">Property Name</option></select></label>
+          <label>Direction<select id="sort-direction"><option value="desc">Descending</option><option value="asc">Ascending</option></select></label>
         </div>
 
         <div class="table-wrapper">
           <table>
             <thead>
-              <tr>
-                <th>Property</th>
-                <th>Address</th>
-                <th>City</th>
-                <th>Asset</th>
-                <th>Asking Price</th>
-                <th>Price/SF</th>
-                <th>Cap Rate</th>
-                <th>Occupancy</th>
-                <th>Status</th>
-                <th>Score</th>
-                <th>Source</th>
-              </tr>
+              <tr><th>Property</th><th>City</th><th>Asset</th><th>Asking</th><th>Offer</th><th>NOI</th><th>Cap</th><th>DSCR</th><th>CoC</th><th>IRR</th><th>Status</th><th>Source</th></tr>
             </thead>
             <tbody id="properties-body"></tbody>
           </table>
@@ -188,35 +72,20 @@
       <div class="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
         <div class="modal-header">
           <h2 id="settings-title">Airtable Settings</h2>
-          <button id="settings-close-btn" class="icon-btn" type="button" aria-label="Close settings">
-            ×
-          </button>
+          <button id="settings-close-btn" class="icon-btn" type="button" aria-label="Close settings">×</button>
         </div>
-        <p class="settings-help">
-          These values are saved only in this browser using localStorage. They are not committed to GitHub.
-        </p>
+        <p class="settings-help">These values are saved only in this browser using localStorage. They are not committed to GitHub.</p>
         <form id="settings-form" class="settings-form">
-          <label>
-            Airtable Personal Access Token
-            <input id="settings-token" type="password" autocomplete="off" placeholder="pat..." />
-          </label>
-          <label>
-            Airtable Base ID
-            <input id="settings-base-id" autocomplete="off" placeholder="app..." />
-          </label>
-          <label>
-            Airtable Table Name
-            <input id="settings-table-name" autocomplete="off" placeholder="Properties" />
-          </label>
+          <label>Airtable Personal Access Token<input id="settings-token" type="password" autocomplete="off" placeholder="pat..." /></label>
+          <label>Airtable Base ID<input id="settings-base-id" autocomplete="off" placeholder="app..." /></label>
+          <label>Airtable Table Name<input id="settings-table-name" autocomplete="off" placeholder="Properties" /></label>
           <div class="modal-actions">
             <button type="submit">Save Settings</button>
             <button id="test-connection-btn" class="secondary-btn" type="button">Test Connection</button>
-            <button id="setup-table-btn" class="secondary-btn" type="button">Setup Properties Table</button>
+            <button id="setup-table-btn" class="secondary-btn" type="button">Setup / Expand Properties Table</button>
             <button id="clear-settings-btn" class="danger-btn" type="button">Clear</button>
           </div>
-          <p class="settings-note">
-            Setup Properties Table creates missing fields only. It does not delete records, delete tables, or remove existing fields.
-          </p>
+          <p class="settings-note">Setup creates missing fields and may rename a generic Name field to Property Name. It does not delete records, tables, or existing fields.</p>
           <p id="settings-message" role="status" aria-live="polite"></p>
         </form>
       </div>

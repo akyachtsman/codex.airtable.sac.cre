@@ -1,572 +1,90 @@
 const CONFIG_STORAGE_KEY = "sac_cre_airtable_settings";
-
-function readStoredConfig() {
-  try {
-    return JSON.parse(localStorage.getItem(CONFIG_STORAGE_KEY) || "{}");
-  } catch {
-    return {};
-  }
-}
-
-function getAirtableConfig() {
-  const stored = readStoredConfig();
-  const fallback = window.APP_CONFIG || {};
-
-  return {
-    AIRTABLE_TOKEN: stored.AIRTABLE_TOKEN || fallback.AIRTABLE_TOKEN || "",
-    AIRTABLE_BASE_ID: stored.AIRTABLE_BASE_ID || fallback.AIRTABLE_BASE_ID || "",
-    AIRTABLE_TABLE_NAME: stored.AIRTABLE_TABLE_NAME || fallback.AIRTABLE_TABLE_NAME || "Properties"
-  };
-}
-
-function saveAirtableConfig(config) {
-  localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(config));
-}
-
-function clearAirtableConfig() {
-  localStorage.removeItem(CONFIG_STORAGE_KEY);
-}
-
-let airtableConfig = getAirtableConfig();
-
-const fields = [
-  "Property Name",
-  "Address",
-  "City",
-  "Submarket",
-  "Asset Type",
-  "Asking Price",
-  "Price per SF",
-  "Building SF",
-  "Lot Size",
-  "Cap Rate",
-  "NOI",
-  "Occupancy",
-  "Year Built",
-  "Broker Name",
-  "Broker Email",
-  "Source URL",
-  "Status",
-  "Notes",
-  "Score"
+const FIELD_GROUPS = [
+  ["Property Info", "Property Name:text:req|Address:text:req|City:text|State:text|Property URL:url|Asking Price:currency|Rentable SF:number0|Lot Size:text|Year Built:number0|Zoning / Class:text|HVAC Age:number0|Roof Age:number0|Parking # / Lot Size:text|Ceiling Height:text|Appraised Value:currency|APN:text|Bedrooms:text|Baths:text|Desired CAP:number|Desired DSCR:number|Asset Type:text|Status:status|Notes:textarea"],
+  ["CAP / Return Metrics", "Cap Rate:number|DSCR Ratio:number|NOI:currency|NOI Debt Service:currency|NOI Collection Loss:currency|Cash on Cash:number|Annual IRR:number|5Y NPV:currency|5Y Total Return:currency|WACC:number|Return on Cost:number|1% Rule:number|Minimum Opportunity Cost of Equity:number|Tax Rate for Interest Deduction:number|Collection Loss Used for Debt Service:number|Cash Flow Appreciation:number|Capital Appreciation %:number"],
+  ["Purchase / Cost Inputs", "Offer Price:currency|All In Cost:currency|Fees:currency|Improvement Budget:currency|Initial Investment:currency"],
+  ["Debt Service", "Finance Amount 1:currency|LTV 1:number|Rate 1:number|Term 1:number0|Loan Type 1:loan|Monthly Payment 1:currency|Finance Amount 2:currency|LTV 2:number|Rate 2:number|Loan Type 2:loan|Monthly Payment 2:currency|Total Yearly Mortgage:currency"],
+  ["Income Summary", "Total Rent:currency|Average Rent per SF:number|Rent Collection Loss:currency|Total Tenant SF:number0"],
+  ["Tenant 1", "Tenant 1 Name:text|Tenant 1 SF:number0|Tenant 1 Rent per SF:number|Tenant 1 Monthly Income:currency|Tenant 1 Lease Expires:date|Tenant 1 Lease Options:text"],
+  ["Tenant 2", "Tenant 2 Name:text|Tenant 2 SF:number0|Tenant 2 Rent per SF:number|Tenant 2 Monthly Income:currency|Tenant 2 Lease Expires:date|Tenant 2 Lease Options:text"],
+  ["Tenant 3", "Tenant 3 Name:text|Tenant 3 SF:number0|Tenant 3 Rent per SF:number|Tenant 3 Monthly Income:currency|Tenant 3 Lease Expires:date|Tenant 3 Lease Options:text"],
+  ["Tenant 4", "Tenant 4 Name:text|Tenant 4 SF:number0|Tenant 4 Rent per SF:number|Tenant 4 Monthly Income:currency|Tenant 4 Lease Expires:date|Tenant 4 Lease Options:text"],
+  ["Expenses", "Total Expense:currency|Insurance:currency|Property Taxes:currency|HOA:currency|Utilities:currency|Management:currency|Maintenance:currency|Landscaping:currency|Cleaning:currency|Misc Expense:currency|Expense Ratio:number|Insurance Ratio:number|Property Taxes Ratio:number|HOA Ratio:number|Utilities Ratio:number|Management Ratio:number|Maintenance Ratio:number|Landscaping Ratio:number|Cleaning Ratio:number|Misc Ratio:number"],
+  ["5-Year Forecast", "Year 1 Cashflow:currency|Year 2 Cashflow:currency|Year 3 Cashflow:currency|Year 4 Cashflow:currency|Year 5 Cashflow:currency|Year 1 Appreciation:currency|Year 2 Appreciation:currency|Year 3 Appreciation:currency|Year 4 Appreciation:currency|Year 5 Appreciation:currency|Year 1 Cashflow Plus Appreciation:currency|Year 2 Cashflow Plus Appreciation:currency|Year 3 Cashflow Plus Appreciation:currency|Year 4 Cashflow Plus Appreciation:currency|Year 5 Cashflow Plus Appreciation:currency"],
+  ["Review / Workflow", "Review Priority:priority|Deal Owner:text|Next Step:text|Next Follow Up Date:date"]
 ];
-
-const form = document.getElementById("property-form");
-const formMessage = document.getElementById("form-message");
-const tbody = document.getElementById("properties-body");
-const refreshBtn = document.getElementById("refresh-btn");
-
-const settingsBtn = document.getElementById("settings-btn");
-const settingsOverlay = document.getElementById("settings-overlay");
-const settingsCloseBtn = document.getElementById("settings-close-btn");
-const settingsForm = document.getElementById("settings-form");
-const settingsToken = document.getElementById("settings-token");
-const settingsBaseId = document.getElementById("settings-base-id");
-const settingsTableName = document.getElementById("settings-table-name");
-const settingsMessage = document.getElementById("settings-message");
-const testConnectionBtn = document.getElementById("test-connection-btn");
-const setupTableBtn = document.getElementById("setup-table-btn");
-const clearSettingsBtn = document.getElementById("clear-settings-btn");
-
-const filterInputs = {
-  search: document.getElementById("search-input"),
-  city: document.getElementById("city-filter"),
-  asset: document.getElementById("asset-filter"),
-  status: document.getElementById("status-filter"),
-  minScore: document.getElementById("min-score-filter"),
-  sortField: document.getElementById("sort-field"),
-  sortDirection: document.getElementById("sort-direction")
+const CHOICES = {
+  status: ["Active", "Under Review", "LOI", "Closed", "Passed"],
+  loan: ["CONV", "IO", "SBA", "Bridge", "Seller Financing", "Other"],
+  priority: ["High", "Medium", "Low"]
 };
-
+const fieldDefinitions = FIELD_GROUPS.flatMap(([group, raw]) =>
+  raw.split("|").map((item) => {
+    const parts = item.split(":");
+    return { name: parts[0], ui: parts[1] || "text", group, required: parts.includes("req") };
+  })
+);
+const fields = fieldDefinitions.map((f) => f.name);
+const numericFields = new Set(fieldDefinitions.filter((f) => ["currency", "number", "number0"].includes(f.ui)).map((f) => f.name));
+function readStoredConfig() { try { return JSON.parse(localStorage.getItem(CONFIG_STORAGE_KEY) || "{}"); } catch { return {}; } }
+function getAirtableConfig() { const s = readStoredConfig(), f = window.APP_CONFIG || {}; return { AIRTABLE_TOKEN: s.AIRTABLE_TOKEN || f.AIRTABLE_TOKEN || "", AIRTABLE_BASE_ID: s.AIRTABLE_BASE_ID || f.AIRTABLE_BASE_ID || "", AIRTABLE_TABLE_NAME: s.AIRTABLE_TABLE_NAME || f.AIRTABLE_TABLE_NAME || "Properties" }; }
+function saveAirtableConfig(config) { localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(config)); }
+function clearAirtableConfig() { localStorage.removeItem(CONFIG_STORAGE_KEY); }
+let airtableConfig = getAirtableConfig();
 let records = [];
-
-const numericFields = new Set([
-  "Asking Price",
-  "Price per SF",
-  "Building SF",
-  "Cap Rate",
-  "NOI",
-  "Occupancy",
-  "Year Built",
-  "Score"
-]);
-
-const requiredAirtableFields = [
-  { name: "Property Name", type: "singleLineText", description: "Property or listing name." },
-  { name: "Address", type: "singleLineText", description: "Property street address." },
-  { name: "City", type: "singleLineText", description: "City or municipality for the property." },
-  { name: "Submarket", type: "singleLineText", description: "Neighborhood or submarket." },
-  { name: "Asset Type", type: "singleLineText", description: "Property type such as office, retail, industrial, or mixed use." },
-  { name: "Asking Price", type: "currency", description: "Seller asking price in dollars.", options: { precision: 2, symbol: "$" } },
-  { name: "Price per SF", type: "number", description: "Asking price divided by building square feet.", options: { precision: 2 } },
-  { name: "Building SF", type: "number", description: "Building size in square feet.", options: { precision: 0 } },
-  { name: "Lot Size", type: "singleLineText", description: "Lot size, acreage, or parcel size." },
-  { name: "Cap Rate", type: "number", description: "Capitalization rate as a whole number. Example: 7.5 means 7.5%.", options: { precision: 2 } },
-  { name: "NOI", type: "currency", description: "Net operating income in dollars.", options: { precision: 2, symbol: "$" } },
-  { name: "Occupancy", type: "number", description: "Occupancy as a whole number. Example: 85 means 85%.", options: { precision: 2 } },
-  { name: "Year Built", type: "number", description: "Year the property was built.", options: { precision: 0 } },
-  { name: "Broker Name", type: "singleLineText", description: "Listing broker name." },
-  { name: "Broker Email", type: "email", description: "Listing broker email." },
-  { name: "Source URL", type: "url", description: "Listing or source webpage." },
-  {
-    name: "Status",
-    type: "singleSelect",
-    description: "Deal review status.",
-    options: {
-      choices: [
-        { name: "Active", color: "greenLight2" },
-        { name: "Under Review", color: "yellowLight2" },
-        { name: "LOI", color: "blueLight2" },
-        { name: "Closed", color: "grayLight2" }
-      ]
-    }
-  },
-  { name: "Notes", type: "multilineText", description: "General notes." },
-  { name: "Score", type: "number", description: "Calculated property score from 0 to 100.", options: { precision: 0 } }
-];
-
-function setStatus(element, message, color) {
-  element.textContent = message;
-  element.style.color = color;
-}
-
-function verifyConfig() {
-  airtableConfig = getAirtableConfig();
-
-  if (
-    !airtableConfig.AIRTABLE_TOKEN ||
-    !airtableConfig.AIRTABLE_BASE_ID ||
-    !airtableConfig.AIRTABLE_TABLE_NAME
-  ) {
-    setStatus(
-      formMessage,
-      "Missing Airtable config. Click Settings and enter your Airtable token, base ID, and table name.",
-      "#b42318"
-    );
-    return false;
-  }
-
-  return true;
-}
-
-function clamp(value, min, max) {
-  return Math.max(min, Math.min(max, value));
-}
-
-function toNumber(value) {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : null;
-}
-
-function calculateScoreFromFields(data) {
-  const capRate = toNumber(data["Cap Rate"]);
-  const pricePerSF = toNumber(data["Price per SF"]);
-  const occupancy = toNumber(data["Occupancy"]);
-
-  const capComponent = capRate == null ? 0 : clamp((capRate - 3) / (10 - 3), 0, 1) * 50;
-  const priceComponent = pricePerSF == null ? 0 : clamp((300 - pricePerSF) / (300 - 50), 0, 1) * 30;
-
-  const upside = occupancy == null ? 0 : clamp(100 - occupancy, 0, 100);
-  const upsideComponent = clamp(upside / 40, 0, 1) * 20;
-
-  return Math.round(capComponent + priceComponent + upsideComponent);
-}
-
-function baseUrl() {
-  airtableConfig = getAirtableConfig();
-
-  return `https://api.airtable.com/v0/${airtableConfig.AIRTABLE_BASE_ID}/${encodeURIComponent(
-    airtableConfig.AIRTABLE_TABLE_NAME
-  )}`;
-}
-
-function metaBaseUrl() {
-  airtableConfig = getAirtableConfig();
-  return `https://api.airtable.com/v0/meta/bases/${airtableConfig.AIRTABLE_BASE_ID}`;
-}
-
-async function airtableRequest(url, options = {}) {
-  airtableConfig = getAirtableConfig();
-
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      Authorization: `Bearer ${airtableConfig.AIRTABLE_TOKEN}`,
-      "Content-Type": "application/json",
-      ...(options.headers || {})
-    }
-  });
-
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`Airtable API error (${response.status}): ${body}`);
-  }
-
-  return response.json();
-}
-
-function serializeForm(formEl) {
-  const formData = new FormData(formEl);
-  const data = {};
-
-  for (const [key, value] of formData.entries()) {
-    if (!fields.includes(key)) continue;
-    if (value === "") continue;
-
-    if (numericFields.has(key)) {
-      const n = toNumber(value);
-      if (n != null) data[key] = n;
-    } else {
-      data[key] = value;
-    }
-  }
-
-  data.Score = calculateScoreFromFields(data);
-  return data;
-}
-
-function formatCurrency(value) {
-  const n = toNumber(value);
-  if (n == null) return "—";
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0
-  }).format(n);
-}
-
-function formatPercent(value) {
-  const n = toNumber(value);
-  if (n == null) return "—";
-  return `${n.toFixed(2)}%`;
-}
-
-function safeLower(v) {
-  return String(v || "").toLowerCase();
-}
-
-function applyFiltersAndSort(inputRecords) {
-  const search = safeLower(filterInputs.search.value.trim());
-  const city = safeLower(filterInputs.city.value.trim());
-  const asset = safeLower(filterInputs.asset.value.trim());
-  const status = safeLower(filterInputs.status.value.trim());
-  const minScore = toNumber(filterInputs.minScore.value);
-  const sortField = filterInputs.sortField.value;
-  const sortDirection = filterInputs.sortDirection.value;
-
-  let out = inputRecords.filter((record) => {
-    const f = record.fields;
-
-    const haystack = [
-      f["Property Name"],
-      f.Address,
-      f.City,
-      f["Submarket"],
-      f["Broker Name"],
-      f["Notes"]
-    ]
-      .join(" ")
-      .toLowerCase();
-
-    if (search && !haystack.includes(search)) return false;
-    if (city && !safeLower(f.City).includes(city)) return false;
-    if (asset && !safeLower(f["Asset Type"]).includes(asset)) return false;
-    if (status && safeLower(f.Status) !== status) return false;
-
-    const score = toNumber(f.Score ?? calculateScoreFromFields(f));
-    if (minScore != null && (score == null || score < minScore)) return false;
-
-    return true;
-  });
-
-  out.sort((a, b) => {
-    const aVal = a.fields[sortField];
-    const bVal = b.fields[sortField];
-
-    const aNum = toNumber(aVal);
-    const bNum = toNumber(bVal);
-
-    let cmp;
-    if (aNum != null && bNum != null) {
-      cmp = aNum - bNum;
-    } else {
-      cmp = String(aVal || "").localeCompare(String(bVal || ""));
-    }
-
-    return sortDirection === "asc" ? cmp : -cmp;
-  });
-
-  return out;
-}
-
-function renderRows(inputRecords) {
-  const filtered = applyFiltersAndSort(inputRecords);
-
-  if (!filtered.length) {
-    tbody.innerHTML = '<tr><td class="empty-row" colspan="11">No matching properties.</td></tr>';
-    return;
-  }
-
-  tbody.innerHTML = filtered
-    .map(({ fields: f }) => {
-      const score = toNumber(f.Score ?? calculateScoreFromFields(f));
-      return `
-        <tr>
-          <td>${f["Property Name"] || "—"}</td>
-          <td>${f.Address || "—"}</td>
-          <td>${f.City || "—"}</td>
-          <td>${f["Asset Type"] || "—"}</td>
-          <td>${formatCurrency(f["Asking Price"])}</td>
-          <td>${formatCurrency(f["Price per SF"])}</td>
-          <td>${formatPercent(f["Cap Rate"])}</td>
-          <td>${formatPercent(f.Occupancy)}</td>
-          <td>${f.Status || "—"}</td>
-          <td>${score == null ? "—" : score}</td>
-          <td>${
-            f["Source URL"]
-              ? `<a href="${f["Source URL"]}" target="_blank" rel="noopener noreferrer">Listing</a>`
-              : "—"
-          }</td>
-        </tr>
-      `;
-    })
-    .join("");
-}
-
-async function fetchAllRecords() {
-  if (!verifyConfig()) return;
-
-  tbody.innerHTML = '<tr><td class="empty-row" colspan="11">Loading…</td></tr>';
-
-  try {
-    let url = `${baseUrl()}?pageSize=100`;
-    const all = [];
-
-    while (url) {
-      const data = await airtableRequest(url, { method: "GET" });
-      all.push(...(data.records || []));
-      url = data.offset
-        ? `${baseUrl()}?pageSize=100&offset=${encodeURIComponent(data.offset)}`
-        : "";
-    }
-
-    records = all;
-    renderRows(records);
-  } catch (error) {
-    console.error(error);
-    tbody.innerHTML = `<tr><td class="empty-row" colspan="11">Failed to load: ${error.message}</td></tr>`;
-  }
-}
-
-function fillSettingsForm() {
-  airtableConfig = getAirtableConfig();
-  settingsToken.value = airtableConfig.AIRTABLE_TOKEN || "";
-  settingsBaseId.value = airtableConfig.AIRTABLE_BASE_ID || "";
-  settingsTableName.value = airtableConfig.AIRTABLE_TABLE_NAME || "Properties";
-  settingsMessage.textContent = "";
-}
-
-function openSettings() {
-  fillSettingsForm();
-  settingsOverlay.hidden = false;
-  settingsBtn.setAttribute("aria-expanded", "true");
-  settingsToken.focus();
-}
-
-function closeSettings() {
-  settingsOverlay.hidden = true;
-  settingsBtn.setAttribute("aria-expanded", "false");
-  settingsBtn.focus();
-}
-
-async function testConnection() {
-  const config = {
-    AIRTABLE_TOKEN: settingsToken.value.trim(),
-    AIRTABLE_BASE_ID: settingsBaseId.value.trim(),
-    AIRTABLE_TABLE_NAME: settingsTableName.value.trim() || "Properties"
-  };
-
-  if (!config.AIRTABLE_TOKEN || !config.AIRTABLE_BASE_ID || !config.AIRTABLE_TABLE_NAME) {
-    setStatus(settingsMessage, "Enter token, base ID, and table name first.", "#b42318");
-    return;
-  }
-
-  saveAirtableConfig(config);
-  airtableConfig = getAirtableConfig();
-  setStatus(settingsMessage, "Testing connection…", "#6b7280");
-
-  try {
-    await airtableRequest(`${baseUrl()}?pageSize=1`, { method: "GET" });
-    setStatus(settingsMessage, "Connection successful.", "#027a48");
-  } catch (error) {
-    console.error(error);
-    setStatus(settingsMessage, `Connection failed: ${error.message}`, "#b42318");
-  }
-}
-
-function getSettingsFormConfig() {
-  return {
-    AIRTABLE_TOKEN: settingsToken.value.trim(),
-    AIRTABLE_BASE_ID: settingsBaseId.value.trim(),
-    AIRTABLE_TABLE_NAME: settingsTableName.value.trim() || "Properties"
-  };
-}
-
-function assertSettingsComplete(config) {
-  if (!config.AIRTABLE_TOKEN || !config.AIRTABLE_BASE_ID || !config.AIRTABLE_TABLE_NAME) {
-    throw new Error("Enter token, base ID, and table name first.");
-  }
-}
-
-async function getBaseSchema() {
-  return airtableRequest(`${metaBaseUrl()}/tables`, { method: "GET" });
-}
-
-function findConfiguredTable(schema) {
-  const tableName = airtableConfig.AIRTABLE_TABLE_NAME.toLowerCase();
-  return (schema.tables || []).find((table) => table.name.toLowerCase() === tableName);
-}
-
-async function renamePrimaryNameFieldIfNeeded(table) {
-  const currentNames = new Set(table.fields.map((field) => field.name));
-  if (currentNames.has("Property Name")) return "Property Name already exists.";
-
-  const nameField = table.fields.find((field) => field.name === "Name" && field.type === "singleLineText");
-  if (!nameField) return "No generic Name field found to rename.";
-
-  await airtableRequest(`${metaBaseUrl()}/tables/${table.id}/fields/${nameField.id}`, {
-    method: "PATCH",
-    body: JSON.stringify({ name: "Property Name", description: "Property or listing name." })
-  });
-
-  return "Renamed Name to Property Name.";
-}
-
-async function createMissingField(table, fieldSpec) {
-  const body = {
-    name: fieldSpec.name,
-    type: fieldSpec.type,
-    description: fieldSpec.description || ""
-  };
-
-  if (fieldSpec.options) {
-    body.options = fieldSpec.options;
-  }
-
-  await airtableRequest(`${metaBaseUrl()}/tables/${table.id}/fields`, {
-    method: "POST",
-    body: JSON.stringify(body)
-  });
-}
-
-async function setupPropertiesTable() {
-  const config = getSettingsFormConfig();
-
-  try {
-    assertSettingsComplete(config);
-    saveAirtableConfig(config);
-    airtableConfig = getAirtableConfig();
-
-    setupTableBtn.disabled = true;
-    setStatus(
-      settingsMessage,
-      "Setting up table… Your token needs schema.bases:read and schema.bases:write.",
-      "#6b7280"
-    );
-
-    let schema = await getBaseSchema();
-    let table = findConfiguredTable(schema);
-
-    if (!table) {
-      throw new Error(`Table not found: ${airtableConfig.AIRTABLE_TABLE_NAME}`);
-    }
-
-    const actions = [];
-    actions.push(await renamePrimaryNameFieldIfNeeded(table));
-
-    schema = await getBaseSchema();
-    table = findConfiguredTable(schema);
-    const existingFieldNames = new Set(table.fields.map((field) => field.name));
-
-    for (const fieldSpec of requiredAirtableFields) {
-      if (existingFieldNames.has(fieldSpec.name)) continue;
-      await createMissingField(table, fieldSpec);
-      existingFieldNames.add(fieldSpec.name);
-      actions.push(`Created ${fieldSpec.name}.`);
-    }
-
-    const createdCount = actions.filter((action) => action.startsWith("Created ")).length;
-    setStatus(
-      settingsMessage,
-      `Setup complete. ${createdCount} missing fields created. ${actions[0]}`,
-      "#027a48"
-    );
-    setStatus(formMessage, "Properties table setup complete. Try saving a property now.", "#027a48");
-  } catch (error) {
-    console.error(error);
-    setStatus(settingsMessage, `Setup failed: ${error.message}`, "#b42318");
-  } finally {
-    setupTableBtn.disabled = false;
-  }
-}
-
-settingsBtn.addEventListener("click", openSettings);
-settingsCloseBtn.addEventListener("click", closeSettings);
-
-settingsOverlay.addEventListener("click", (event) => {
-  if (event.target === settingsOverlay) closeSettings();
-});
-
-document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && !settingsOverlay.hidden) closeSettings();
-});
-
-settingsForm.addEventListener("submit", (event) => {
-  event.preventDefault();
-
-  const config = getSettingsFormConfig();
-
-  saveAirtableConfig(config);
-  airtableConfig = getAirtableConfig();
-  setStatus(settingsMessage, "Settings saved in this browser.", "#027a48");
-  setStatus(formMessage, "Airtable settings saved. Click Refresh to load records.", "#027a48");
-});
-
-testConnectionBtn.addEventListener("click", testConnection);
-setupTableBtn.addEventListener("click", setupPropertiesTable);
-
-clearSettingsBtn.addEventListener("click", () => {
-  clearAirtableConfig();
-  airtableConfig = getAirtableConfig();
-  fillSettingsForm();
-  setStatus(settingsMessage, "Saved browser settings cleared.", "#6b7280");
-});
-
-form.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  if (!verifyConfig()) return;
-
-  try {
-    const payloadFields = serializeForm(form);
-    await airtableRequest(baseUrl(), {
-      method: "POST",
-      body: JSON.stringify({ records: [{ fields: payloadFields }] })
+const el = {
+  form: document.getElementById("property-form"), formMsg: document.getElementById("form-message"), tbody: document.getElementById("properties-body"), refresh: document.getElementById("refresh-btn"), clearForm: document.getElementById("clear-form-btn"), settingsBtn: document.getElementById("settings-btn"), overlay: document.getElementById("settings-overlay"), close: document.getElementById("settings-close-btn"), settingsForm: document.getElementById("settings-form"), token: document.getElementById("settings-token"), base: document.getElementById("settings-base-id"), table: document.getElementById("settings-table-name"), settingsMsg: document.getElementById("settings-message"), test: document.getElementById("test-connection-btn"), setup: document.getElementById("setup-table-btn"), clearSettings: document.getElementById("clear-settings-btn"), count: document.getElementById("metric-count"), cap: document.getElementById("metric-cap"), dscr: document.getElementById("metric-dscr"), asking: document.getElementById("metric-asking")
+};
+const filters = { search: document.getElementById("search-input"), city: document.getElementById("city-filter"), asset: document.getElementById("asset-filter"), status: document.getElementById("status-filter"), sortField: document.getElementById("sort-field"), sortDirection: document.getElementById("sort-direction") };
+function setStatus(target, message, color) { target.textContent = message; target.style.color = color; }
+function toNumber(value) { const n = Number(value); return Number.isFinite(n) ? n : null; }
+function formatCurrency(value) { const n = toNumber(value); return n == null ? "—" : new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n); }
+function formatPercent(value) { const n = toNumber(value); return n == null ? "—" : `${n.toFixed(2)}%`; }
+function safeLower(value) { return String(value || "").toLowerCase(); }
+function renderForm() {
+  el.form.innerHTML = "";
+  for (const [group] of FIELD_GROUPS) {
+    const section = document.createElement("fieldset"); section.className = "form-section";
+    const legend = document.createElement("legend"); legend.textContent = group; section.append(legend);
+    const grid = document.createElement("div"); grid.className = "form-grid";
+    fieldDefinitions.filter((f) => f.group === group).forEach((field) => {
+      const label = document.createElement("label"); if (field.ui === "textarea") label.className = "full-width";
+      label.append(document.createTextNode(field.name)); label.append(makeInput(field)); grid.append(label);
     });
-
-    form.reset();
-    setStatus(formMessage, "Property saved successfully.", "#027a48");
-    await fetchAllRecords();
-  } catch (error) {
-    console.error(error);
-    setStatus(formMessage, `Save failed: ${error.message}`, "#b42318");
+    section.append(grid); el.form.append(section);
   }
-});
-
-Object.values(filterInputs).forEach((el) => {
-  el.addEventListener("input", () => renderRows(records));
-  el.addEventListener("change", () => renderRows(records));
-});
-
-refreshBtn.addEventListener("click", fetchAllRecords);
-
-fetchAllRecords();
+}
+function makeInput(field) {
+  if (field.ui === "textarea") { const textarea = document.createElement("textarea"); textarea.name = field.name; textarea.rows = 3; return textarea; }
+  if (["status", "loan", "priority"].includes(field.ui)) { const select = document.createElement("select"); select.name = field.name; select.append(new Option("Select", "")); CHOICES[field.ui].forEach((choice) => select.append(new Option(choice, choice))); return select; }
+  const input = document.createElement("input"); input.name = field.name; input.type = field.ui === "url" ? "url" : field.ui === "date" ? "date" : ["currency", "number", "number0"].includes(field.ui) ? "number" : "text";
+  if (field.ui === "number0") input.step = "1"; if (["currency", "number"].includes(field.ui)) input.step = "0.01"; if (field.required) input.required = true; return input;
+}
+function verifyConfig() { airtableConfig = getAirtableConfig(); if (!airtableConfig.AIRTABLE_TOKEN || !airtableConfig.AIRTABLE_BASE_ID || !airtableConfig.AIRTABLE_TABLE_NAME) { setStatus(el.formMsg, "Missing Airtable config. Click Settings and enter your Airtable token, base ID, and table name.", "#b42318"); return false; } return true; }
+function baseUrl() { airtableConfig = getAirtableConfig(); return `https://api.airtable.com/v0/${airtableConfig.AIRTABLE_BASE_ID}/${encodeURIComponent(airtableConfig.AIRTABLE_TABLE_NAME)}`; }
+function metaBaseUrl() { airtableConfig = getAirtableConfig(); return `https://api.airtable.com/v0/meta/bases/${airtableConfig.AIRTABLE_BASE_ID}`; }
+async function airtableRequest(url, options = {}) { airtableConfig = getAirtableConfig(); const response = await fetch(url, { ...options, headers: { Authorization: `Bearer ${airtableConfig.AIRTABLE_TOKEN}`, "Content-Type": "application/json", ...(options.headers || {}) } }); if (!response.ok) throw new Error(`Airtable API error (${response.status}): ${await response.text()}`); return response.json(); }
+function serializeForm(form) { const data = {}; for (const [key, value] of new FormData(form).entries()) { if (!fields.includes(key) || value === "") continue; if (numericFields.has(key)) { const n = toNumber(value); if (n != null) data[key] = n; } else data[key] = value; } return data; }
+function updateMetrics(inputRecords) { el.count.textContent = inputRecords.length; const vals = (name) => inputRecords.map((record) => toNumber(record.fields[name])).filter((v) => v != null); const avg = (list) => list.length ? list.reduce((a, b) => a + b, 0) / list.length : null; const sum = (list) => list.reduce((a, b) => a + b, 0); el.cap.textContent = formatPercent(avg(vals("Cap Rate"))); const avgDscr = avg(vals("DSCR Ratio")); el.dscr.textContent = avgDscr == null ? "—" : avgDscr.toFixed(2); el.asking.textContent = formatCurrency(sum(vals("Asking Price"))); }
+function applyFilters(inputRecords) { const search = safeLower(filters.search.value.trim()), city = safeLower(filters.city.value.trim()), asset = safeLower(filters.asset.value.trim()), status = safeLower(filters.status.value.trim()), sortField = filters.sortField.value, sortDirection = filters.sortDirection.value; let output = inputRecords.filter((record) => { const f = record.fields; const haystack = [f["Property Name"], f.Address, f.City, f["Asset Type"], f["Tenant 1 Name"], f["Tenant 2 Name"], f["Tenant 3 Name"], f["Tenant 4 Name"], f["Deal Owner"], f.Notes].join(" ").toLowerCase(); return (!search || haystack.includes(search)) && (!city || safeLower(f.City).includes(city)) && (!asset || safeLower(f["Asset Type"]).includes(asset)) && (!status || safeLower(f.Status) === status); }); output.sort((a, b) => { const av = a.fields[sortField], bv = b.fields[sortField], an = toNumber(av), bn = toNumber(bv); let cmp = an != null && bn != null ? an - bn : String(av || "").localeCompare(String(bv || "")); return sortDirection === "asc" ? cmp : -cmp; }); return output; }
+function renderRows(inputRecords) { updateMetrics(inputRecords); const output = applyFilters(inputRecords); if (!output.length) { el.tbody.innerHTML = '<tr><td class="empty-row" colspan="12">No matching properties.</td></tr>'; return; } el.tbody.innerHTML = output.map(({ fields: f }) => `<tr><td><strong>${f["Property Name"] || "—"}</strong><br><span>${f.Address || ""}</span></td><td>${f.City || "—"}</td><td>${f["Asset Type"] || "—"}</td><td>${formatCurrency(f["Asking Price"])}</td><td>${formatCurrency(f["Offer Price"])}</td><td>${formatCurrency(f.NOI)}</td><td>${formatPercent(f["Cap Rate"])}</td><td>${toNumber(f["DSCR Ratio"]) == null ? "—" : toNumber(f["DSCR Ratio"]).toFixed(2)}</td><td>${formatPercent(f["Cash on Cash"])}</td><td>${formatPercent(f["Annual IRR"])}</td><td>${f.Status || "—"}</td><td>${f["Property URL"] ? `<a href="${f["Property URL"]}" target="_blank" rel="noopener noreferrer">Open</a>` : "—"}</td></tr>`).join(""); }
+async function fetchAllRecords() { if (!verifyConfig()) return; el.tbody.innerHTML = '<tr><td class="empty-row" colspan="12">Loading…</td></tr>'; try { let url = `${baseUrl()}?pageSize=100`; const all = []; while (url) { const data = await airtableRequest(url, { method: "GET" }); all.push(...(data.records || [])); url = data.offset ? `${baseUrl()}?pageSize=100&offset=${encodeURIComponent(data.offset)}` : ""; } records = all; renderRows(records); } catch (error) { console.error(error); el.tbody.innerHTML = `<tr><td class="empty-row" colspan="12">Failed to load: ${error.message}</td></tr>`; } }
+function fillSettingsForm() { airtableConfig = getAirtableConfig(); el.token.value = airtableConfig.AIRTABLE_TOKEN || ""; el.base.value = airtableConfig.AIRTABLE_BASE_ID || ""; el.table.value = airtableConfig.AIRTABLE_TABLE_NAME || "Properties"; el.settingsMsg.textContent = ""; }
+function openSettings() { fillSettingsForm(); el.overlay.hidden = false; el.settingsBtn.setAttribute("aria-expanded", "true"); el.token.focus(); }
+function closeSettings() { el.overlay.hidden = true; el.settingsBtn.setAttribute("aria-expanded", "false"); el.settingsBtn.focus(); }
+function settingsConfig() { return { AIRTABLE_TOKEN: el.token.value.trim(), AIRTABLE_BASE_ID: el.base.value.trim(), AIRTABLE_TABLE_NAME: el.table.value.trim() || "Properties" }; }
+function assertSettings(config) { if (!config.AIRTABLE_TOKEN || !config.AIRTABLE_BASE_ID || !config.AIRTABLE_TABLE_NAME) throw new Error("Enter token, base ID, and table name first."); }
+async function testConnection() { const config = settingsConfig(); if (!config.AIRTABLE_TOKEN || !config.AIRTABLE_BASE_ID || !config.AIRTABLE_TABLE_NAME) { setStatus(el.settingsMsg, "Enter token, base ID, and table name first.", "#b42318"); return; } saveAirtableConfig(config); airtableConfig = getAirtableConfig(); setStatus(el.settingsMsg, "Testing connection…", "#6b7280"); try { await airtableRequest(`${baseUrl()}?pageSize=1`, { method: "GET" }); setStatus(el.settingsMsg, "Connection successful.", "#027a48"); } catch (error) { console.error(error); setStatus(el.settingsMsg, `Connection failed: ${error.message}`, "#b42318"); } }
+function metaForField(field) { const base = { name: field.name, description: field.name }; if (field.ui === "textarea") return { ...base, type: "multilineText" }; if (field.ui === "url") return { ...base, type: "url" }; if (field.ui === "date") return { ...base, type: "date", options: { dateFormat: { name: "iso", format: "YYYY-MM-DD" } } }; if (field.ui === "currency") return { ...base, type: "currency", options: { precision: 2, symbol: "$" } }; if (["number", "number0"].includes(field.ui)) return { ...base, type: "number", options: { precision: field.ui === "number0" ? 0 : 2 } }; if (["status", "loan", "priority"].includes(field.ui)) return { ...base, type: "singleSelect", options: { choices: CHOICES[field.ui].map((name, index) => ({ name, color: ["greenLight2", "yellowLight2", "blueLight2", "grayLight2", "redLight2", "purpleLight2"][index % 6] })) } }; return { ...base, type: "singleLineText" }; }
+async function getBaseSchema() { return airtableRequest(`${metaBaseUrl()}/tables`, { method: "GET" }); }
+function findTable(schema) { const tableName = airtableConfig.AIRTABLE_TABLE_NAME.toLowerCase(); return (schema.tables || []).find((table) => table.name.toLowerCase() === tableName); }
+async function renameNameIfNeeded(table) { const names = new Set(table.fields.map((field) => field.name)); if (names.has("Property Name")) return "Property Name exists."; const nameField = table.fields.find((field) => field.name === "Name" && field.type === "singleLineText"); if (!nameField) return "No generic Name field found."; await airtableRequest(`${metaBaseUrl()}/tables/${table.id}/fields/${nameField.id}`, { method: "PATCH", body: JSON.stringify({ name: "Property Name", description: "Property or listing name." }) }); return "Renamed Name to Property Name."; }
+async function createMissingField(table, field) { await airtableRequest(`${metaBaseUrl()}/tables/${table.id}/fields`, { method: "POST", body: JSON.stringify(metaForField(field)) }); }
+async function setupPropertiesTable() { const config = settingsConfig(); try { assertSettings(config); saveAirtableConfig(config); airtableConfig = getAirtableConfig(); el.setup.disabled = true; setStatus(el.settingsMsg, "Setting up expanded analytics fields… token needs schema.bases:read/write.", "#6b7280"); let schema = await getBaseSchema(); let table = findTable(schema); if (!table) throw new Error(`Table not found: ${airtableConfig.AIRTABLE_TABLE_NAME}`); const actions = [await renameNameIfNeeded(table)]; schema = await getBaseSchema(); table = findTable(schema); const existing = new Set(table.fields.map((field) => field.name)); for (const field of fieldDefinitions) { if (existing.has(field.name)) continue; await createMissingField(table, field); existing.add(field.name); actions.push(`Created ${field.name}`); } const created = actions.filter((action) => action.startsWith("Created")).length; setStatus(el.settingsMsg, `Setup complete. ${created} missing fields created. ${actions[0]}`, "#027a48"); setStatus(el.formMsg, "Expanded Properties table setup complete.", "#027a48"); } catch (error) { console.error(error); setStatus(el.settingsMsg, `Setup failed: ${error.message}`, "#b42318"); } finally { el.setup.disabled = false; } }
+el.settingsBtn.addEventListener("click", openSettings); el.close.addEventListener("click", closeSettings); el.overlay.addEventListener("click", (event) => { if (event.target === el.overlay) closeSettings(); }); document.addEventListener("keydown", (event) => { if (event.key === "Escape" && !el.overlay.hidden) closeSettings(); });
+el.settingsForm.addEventListener("submit", (event) => { event.preventDefault(); const config = settingsConfig(); saveAirtableConfig(config); airtableConfig = getAirtableConfig(); setStatus(el.settingsMsg, "Settings saved in this browser.", "#027a48"); setStatus(el.formMsg, "Airtable settings saved. Click Refresh to load records.", "#027a48"); });
+el.test.addEventListener("click", testConnection); el.setup.addEventListener("click", setupPropertiesTable); el.clearSettings.addEventListener("click", () => { clearAirtableConfig(); airtableConfig = getAirtableConfig(); fillSettingsForm(); setStatus(el.settingsMsg, "Saved browser settings cleared.", "#6b7280"); });
+el.form.addEventListener("submit", async (event) => { event.preventDefault(); if (!verifyConfig()) return; try { await airtableRequest(`${baseUrl()}?typecast=true`, { method: "POST", body: JSON.stringify({ records: [{ fields: serializeForm(el.form) }] }) }); el.form.reset(); setStatus(el.formMsg, "Property saved successfully.", "#027a48"); await fetchAllRecords(); } catch (error) { console.error(error); setStatus(el.formMsg, `Save failed: ${error.message}`, "#b42318"); } });
+Object.values(filters).forEach((input) => { input.addEventListener("input", () => renderRows(records)); input.addEventListener("change", () => renderRows(records)); });
+el.refresh.addEventListener("click", fetchAllRecords); el.clearForm.addEventListener("click", () => { el.form.reset(); setStatus(el.formMsg, "Form cleared.", "#6b7280"); });
+renderForm(); fetchAllRecords();
