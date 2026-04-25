@@ -1,5 +1,36 @@
-const { AIRTABLE_TOKEN, AIRTABLE_BASE_ID, AIRTABLE_TABLE_NAME } =
-  window.APP_CONFIG || {};
+const CONFIG_STORAGE_KEY = "sac_cre_airtable_settings";
+
+function readStoredConfig() {
+  try {
+    return JSON.parse(localStorage.getItem(CONFIG_STORAGE_KEY) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function getAirtableConfig() {
+  const stored = readStoredConfig();
+  const fallback = window.APP_CONFIG || {};
+
+  return {
+    AIRTABLE_TOKEN:
+      stored.AIRTABLE_TOKEN || fallback.AIRTABLE_TOKEN || "",
+    AIRTABLE_BASE_ID:
+      stored.AIRTABLE_BASE_ID || fallback.AIRTABLE_BASE_ID || "",
+    AIRTABLE_TABLE_NAME:
+      stored.AIRTABLE_TABLE_NAME || fallback.AIRTABLE_TABLE_NAME || "Properties"
+  };
+}
+
+function saveAirtableConfig(config) {
+  localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(config));
+}
+
+function clearAirtableConfig() {
+  localStorage.removeItem(CONFIG_STORAGE_KEY);
+}
+
+let airtableConfig = getAirtableConfig();
 
 const fields = [
   "Property Name",
@@ -28,6 +59,17 @@ const formMessage = document.getElementById("form-message");
 const tbody = document.getElementById("properties-body");
 const refreshBtn = document.getElementById("refresh-btn");
 
+const settingsBtn = document.getElementById("settings-btn");
+const settingsOverlay = document.getElementById("settings-overlay");
+const settingsCloseBtn = document.getElementById("settings-close-btn");
+const settingsForm = document.getElementById("settings-form");
+const settingsToken = document.getElementById("settings-token");
+const settingsBaseId = document.getElementById("settings-base-id");
+const settingsTableName = document.getElementById("settings-table-name");
+const settingsMessage = document.getElementById("settings-message");
+const testConnectionBtn = document.getElementById("test-connection-btn");
+const clearSettingsBtn = document.getElementById("clear-settings-btn");
+
 const filterInputs = {
   search: document.getElementById("search-input"),
   city: document.getElementById("city-filter"),
@@ -51,11 +93,24 @@ const numericFields = new Set([
   "Score"
 ]);
 
+function setStatus(element, message, color) {
+  element.textContent = message;
+  element.style.color = color;
+}
+
 function verifyConfig() {
-  if (!AIRTABLE_TOKEN || !AIRTABLE_BASE_ID || !AIRTABLE_TABLE_NAME) {
-    formMessage.textContent =
-      "Missing Airtable config. Copy config.example.js to config.js and fill in credentials.";
-    formMessage.style.color = "#b42318";
+  airtableConfig = getAirtableConfig();
+
+  if (
+    !airtableConfig.AIRTABLE_TOKEN ||
+    !airtableConfig.AIRTABLE_BASE_ID ||
+    !airtableConfig.AIRTABLE_TABLE_NAME
+  ) {
+    setStatus(
+      formMessage,
+      "Missing Airtable config. Click Settings and enter your Airtable token, base ID, and table name.",
+      "#b42318"
+    );
     return false;
   }
 
@@ -88,16 +143,20 @@ function calculateScoreFromFields(data) {
 }
 
 function baseUrl() {
-  return `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(
-    AIRTABLE_TABLE_NAME
+  airtableConfig = getAirtableConfig();
+
+  return `https://api.airtable.com/v0/${airtableConfig.AIRTABLE_BASE_ID}/${encodeURIComponent(
+    airtableConfig.AIRTABLE_TABLE_NAME
   )}`;
 }
 
 async function airtableRequest(url, options = {}) {
+  airtableConfig = getAirtableConfig();
+
   const response = await fetch(url, {
     ...options,
     headers: {
-      Authorization: `Bearer ${AIRTABLE_TOKEN}`,
+      Authorization: `Bearer ${airtableConfig.AIRTABLE_TOKEN}`,
       "Content-Type": "application/json",
       ...(options.headers || {})
     }
@@ -265,6 +324,87 @@ async function fetchAllRecords() {
   }
 }
 
+function fillSettingsForm() {
+  airtableConfig = getAirtableConfig();
+  settingsToken.value = airtableConfig.AIRTABLE_TOKEN || "";
+  settingsBaseId.value = airtableConfig.AIRTABLE_BASE_ID || "";
+  settingsTableName.value = airtableConfig.AIRTABLE_TABLE_NAME || "Properties";
+  settingsMessage.textContent = "";
+}
+
+function openSettings() {
+  fillSettingsForm();
+  settingsOverlay.hidden = false;
+  settingsBtn.setAttribute("aria-expanded", "true");
+  settingsToken.focus();
+}
+
+function closeSettings() {
+  settingsOverlay.hidden = true;
+  settingsBtn.setAttribute("aria-expanded", "false");
+  settingsBtn.focus();
+}
+
+async function testConnection() {
+  const config = {
+    AIRTABLE_TOKEN: settingsToken.value.trim(),
+    AIRTABLE_BASE_ID: settingsBaseId.value.trim(),
+    AIRTABLE_TABLE_NAME: settingsTableName.value.trim() || "Properties"
+  };
+
+  if (!config.AIRTABLE_TOKEN || !config.AIRTABLE_BASE_ID || !config.AIRTABLE_TABLE_NAME) {
+    setStatus(settingsMessage, "Enter token, base ID, and table name first.", "#b42318");
+    return;
+  }
+
+  saveAirtableConfig(config);
+  airtableConfig = getAirtableConfig();
+  setStatus(settingsMessage, "Testing connection…", "#6b7280");
+
+  try {
+    await airtableRequest(`${baseUrl()}?pageSize=1`, { method: "GET" });
+    setStatus(settingsMessage, "Connection successful.", "#027a48");
+  } catch (error) {
+    console.error(error);
+    setStatus(settingsMessage, `Connection failed: ${error.message}`, "#b42318");
+  }
+}
+
+settingsBtn.addEventListener("click", openSettings);
+settingsCloseBtn.addEventListener("click", closeSettings);
+
+settingsOverlay.addEventListener("click", (event) => {
+  if (event.target === settingsOverlay) closeSettings();
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !settingsOverlay.hidden) closeSettings();
+});
+
+settingsForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+
+  const config = {
+    AIRTABLE_TOKEN: settingsToken.value.trim(),
+    AIRTABLE_BASE_ID: settingsBaseId.value.trim(),
+    AIRTABLE_TABLE_NAME: settingsTableName.value.trim() || "Properties"
+  };
+
+  saveAirtableConfig(config);
+  airtableConfig = getAirtableConfig();
+  setStatus(settingsMessage, "Settings saved in this browser.", "#027a48");
+  setStatus(formMessage, "Airtable settings saved. Click Refresh to load records.", "#027a48");
+});
+
+testConnectionBtn.addEventListener("click", testConnection);
+
+clearSettingsBtn.addEventListener("click", () => {
+  clearAirtableConfig();
+  airtableConfig = getAirtableConfig();
+  fillSettingsForm();
+  setStatus(settingsMessage, "Saved browser settings cleared.", "#6b7280");
+});
+
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!verifyConfig()) return;
@@ -277,13 +417,11 @@ form.addEventListener("submit", async (event) => {
     });
 
     form.reset();
-    formMessage.textContent = "Property saved successfully.";
-    formMessage.style.color = "#027a48";
+    setStatus(formMessage, "Property saved successfully.", "#027a48");
     await fetchAllRecords();
   } catch (error) {
     console.error(error);
-    formMessage.textContent = `Save failed: ${error.message}`;
-    formMessage.style.color = "#b42318";
+    setStatus(formMessage, `Save failed: ${error.message}`, "#b42318");
   }
 });
 
