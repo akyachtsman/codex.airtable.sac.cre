@@ -7,6 +7,7 @@ A simple Airtable-backed web app for tracking and comparing Sacramento commercia
 - **Airtable backend** with one table: `Properties`
 - **Add Property form** to create new records
 - **Table view** with search, filter, and sort controls
+- **Settings modal** for entering Airtable credentials in the browser
 - **Scoring logic** (0–100) based on:
   - higher cap rate (better)
   - lower price per SF (better)
@@ -55,25 +56,38 @@ You need:
   - `data.records:write`
   - Access to your target base
 
-Then:
+### Recommended: use the Settings button
 
-1. Copy the config template:
+1. Open the app.
+2. Click **Settings**.
+3. Enter your Airtable Personal Access Token, Base ID, and Table Name.
+4. Click **Save Settings**.
+5. Click **Test Connection**.
+6. Click **Refresh** to reload records.
 
-   ```bash
-   cp config.example.js config.js
-   ```
+The app saves those values only in your browser using `localStorage`. They are not committed to GitHub.
 
-2. Open `config.js` and add your credentials:
+### Optional fallback: local `config.js`
 
-   ```js
-   window.APP_CONFIG = {
-     AIRTABLE_TOKEN: "pat_your_token_here",
-     AIRTABLE_BASE_ID: "app_your_base_id_here",
-     AIRTABLE_TABLE_NAME: "Properties"
-   };
-   ```
+For local development, you can still copy the config template:
 
-⚠️ This is a client-side demo. Do **not** use this pattern for production without a backend proxy because the token is exposed in browser code.
+```bash
+cp config.example.js config.js
+```
+
+Then edit `config.js`:
+
+```js
+window.APP_CONFIG = {
+  AIRTABLE_TOKEN: "pat_your_token_here",
+  AIRTABLE_BASE_ID: "app_your_base_id_here",
+  AIRTABLE_TABLE_NAME: "Properties"
+};
+```
+
+`config.js` is ignored by Git so credentials are not committed.
+
+⚠️ This is a client-side demo. Do **not** use this pattern for production without a backend proxy because any token used by browser JavaScript can be viewed in that browser.
 
 ---
 
@@ -125,8 +139,8 @@ ROUND(
 
 ## 5) Using the app
 
+- Click **Settings** and save your Airtable connection values.
 - Fill out the **Add Property** form and click **Save Property**.
 - Use filters to narrow list by city, asset type, status, or minimum score.
 - Use **Sort By** and **Direction** to compare opportunities quickly.
 - Click **Refresh** to reload from Airtable.
-
